@@ -1,0 +1,161 @@
+library(shiny)
+library(plotly)
+
+ui <- fluidPage(
+  titlePanel("Crime Statistics in Victoria Data Visualisations"),
+  
+  fluidRow(
+    column(width = 4,
+           wellPanel(
+             p("The primary graph illustrates the annual total of offences. It offers two customizable dimensions: the geographical location of the incident, and the type of offence committed."),
+             selectInput("location", "Location:", choices = NULL),
+             selectInput("offence", "Offence Type:", choices = NULL),
+             textOutput("offence_description"),
+             p(),
+             selectInput("compare_with", "Compare Offences With:", choices = NULL),
+             p('Criminal behavior primarily emerges from a complex mix of negative social, economic, cultural, and familial circumstances. To effectively prevent crime, we need to comprehend these underlying causes. These are complex and interrelated, but can be summarized in three main categories:'),
+             p('- Economic Factors/Poverty'),
+             p('- Social Environment'),
+             p('- Family Structures'),
+             p("Select a category from three prominent crime determinants for comparison between the first and second graphs. Economic factors are represented by Victoria's average weekly adult income, while the social environment variable is captured by the ratio of higher education students to the population aged 15-39. The chosen family structure factor is the number of divorces. Please note, a correlation between the two graphs doesn't necessarily imply causation.")
+           )
+    ),
+    column(width = 8,
+           plotlyOutput("crime_plot"),
+           p('Data Reference: https://www.crimestatistics.vic.gov.au/'),
+           plotlyOutput("compared"),
+           textOutput("references"),
+    )
+  )  )
+Server Code:
+
+function(input, output, session) {
+  # Economics Factors/Poverty: Average weekly earnings in Victoria ----------------------------------------------------------------------------------------------------------------------
+  # data source:
+  # https://www.abs.gov.au/statistics/labour/earnings-and-working-conditions/average-weekly-earnings-australia
+  years1 <- 2013:2022
+  # values are approximated and rounded
+  weeklyIncome <- c(1500,1400,1410,1490,1500,1600,1647,1719,1760,1751)
+  
+  df_weeklyIncome <- data.frame(years1,weeklyIncome)
+  
+  # Family Structures: Divorces in Victoria ----------------------------------------------------------------------------------------------------------------------
+  
+  # data source:
+  # https://www.abs.gov.au/statistics/people/people-and-communities/marriages-and-divorces-australia
+  # I have collected the number of divorces from each data sheet for each year.
+  years2 <- 2013:2020
+  divorce_count <- c(11663,11711,12155,11179,12877,12858,11861,11989)  # Random numbers between 500 and 1000 for the sake of the example
+  
+  df_familyStructure <- data.frame(years2, divorce_count)
+  
+  # Social Environment: Higher Education Number Of Students in Victoria ----------------------------------------------------------------------------------------------------------------------
+  # data source:
+  # https://www.education.gov.au/higher-education-statistics/student-data
+  # Population data in victoria:
+  # data source:
+  # https://www.planning.vic.gov.au/land-use-and-population-research/victorian-population
+  # Population of age 15-39
+  population_counts <- c(2068017,2113937,2166979,2225311,2278763,2333292,2364038,2308680,2278117)
+  
+  years3 <- 2013:2021
+  students_counts <- c(257500,270759,282376,295190,309746,326090,339452,328685,318943)
+  
+  df_higherEducation <- data.frame(years3, students_counts,population_counts)
+  
+  # Offence Data ----------------------------------------------------------------------------------------------------------------------
+  data <- readxl::read_excel("Data_Tables_Recorded_Offences_Visualisation_Year_Ending_December_2022", sheet = "Table 02")
+  
+  # Get the unique Offence Subdivision for each Offence Division
+  subdivisions_by_division <- split(data$`Offence Subdivision`, data$`Offence Division`)
+  
+  # Remove duplicates from each list
+  subdivisions_by_division <- lapply(subdivisions_by_division, unique)
+  
+  # Print the result
+  print(subdivisions_by_division)
+  
+  offence_description <- c(
+    "All" = "All Offences Categories Combined.",
+    "A Crimes against the person" = "This category includes the following crimes: 1- A20 Assault and related offences. 2- A50 Robbery. 3- A70 Stalking, harassment and threatening behaviour. 4- A80 Dangerous and negligent acts endangering people. 5- Other crimes against the person",
+    "B Property and deception offences" = "This category includes the following crimes: 1- B10 Arson. 2- B30 Burglary/Break and enter. 3- B50 Deception. 4- B20 Property damage. 5- B40 Theft. 6- B60 Bribery.",
+    "C Drug offences" = "This category includes the following crimes: 1- C10 Drug dealing and trafficking. 2- C30 Drug use and possession. 3- C20 Cultivate or manufacture drugs. 4- C90 Other drug offences.",
+    "D Public order and security offences" = "This category includes the following crimes: 1- D10 Weapons and explosives offences. 2- D20 Disorderly and offensive conduct. 3- D30 Public nuisance offences. 4- D40 Public security offences.",
+    "E Justice procedures offences" = "This category includes the following crimes: 1- E10 Justice procedures. 2- E20 Breaches of orders.",
+    "F Other offences" = "This category includes the following crimes: 1- F10 Regulatory driving offences. 2- F20 Transport regulation offences. 3- F30 Other government regulatory offences. 4- F90 Miscellaneous offences."
+  )
+  
+  references <- c(
+    "Economic Factors/Poverty" = "Data Reference: https://www.abs.gov.au/statistics/labour/earnings-and-working-conditions/average-weekly-earnings-australia",
+    "Social Enviroment" = "Data Reference: https://www.education.gov.au/higher-education-statistics/student-data & https://www.planning.vic.gov.au/land-use-and-population-research/victorian-population",
+    "Family Structures" = "Data Reference: https://www.abs.gov.au/statistics/people/people-and-communities/marriages-and-divorces-australia"
+  )
+  
+  
+  
+  # ----------------------------------------------------------------------------------------------------------------------
+  # Update the selectInput options based on your data
+  updateSelectInput(session, "location",
+                    choices = c("All", unique(data$`Location Division`)))
+  
+  updateSelectInput(session, "offence",
+                    choices = c("All", unique(data$`Offence Division`)))
+  
+  updateSelectInput(session, "compare_with",
+                    choices = c("Economic Factors/Poverty","Social Enviroment","Family Structures"))
+  
+  reactive_data <- reactive({
+    df <- data
+    if(input$location != "All") {
+      df <- df[df$`Location Division` == input$location, ]
+    }
+    if(input$offence != "All") {
+      df <- df[df$`Offence Division` == input$offence, ]
+    }
+    df
+  })
+  
+  output$offence_description <- renderText({
+    offence_description[[input$offence]]
+  })
+  
+  output$references <- renderText({
+    references[[input$compare_with]]
+  })
+  
+  
+  output$crime_plot <- renderPlotly({
+    df <- reactive_data()
+    df <- df %>% 
+      dplyr::group_by(Year) %>% 
+      dplyr::summarise(`Offence Count` = sum(`Offence Count`, na.rm = TRUE))
+    
+    plot_ly(df, x = ~Year, y = ~`Offence Count`, type = 'scatter') %>%
+      layout(title = "Total Number of Offences per Year",
+             xaxis = list(title = "Year"),
+             yaxis = list(title = "Number of Offences"))
+  })
+  
+  output$compared <- renderPlotly({
+    if (input$compare_with == "Economic Factors/Poverty") {
+      plot_ly(df_weeklyIncome, x = ~years1, y = ~weeklyIncome, type = 'scatter') %>%
+        layout(title = "Average Weekly Income over the Years",
+               xaxis = list(title = "Year"),
+               yaxis = list(title = "Average Weekly Income"))
+    } else if (input$compare_with == "Family Structures") {
+      plot_ly(df_familyStructure, x = ~years2, y = ~divorce_count, type = 'scatter') %>%
+        layout(title = "Divorce Counts over the Years",
+               xaxis = list(title = "Year"),
+               yaxis = list(title = "Divorce Count"))
+    } else if (input$compare_with == "Social Enviroment") {
+      plot_ly() %>%
+        add_trace(data = df_higherEducation, x = ~years3, y = ~students_counts, type = 'bar', name = 'Number of Students') %>%
+        add_trace(data = df_higherEducation, x = ~years3, y = ~population_counts, type = 'bar', name = 'Population') %>%
+        layout(title = "Number of Students and Population over the Years",
+               xaxis = list(title = "Year"),
+               yaxis = list(title = "Count"),
+               barmode = 'group')
+    }
+  })
+  
+}

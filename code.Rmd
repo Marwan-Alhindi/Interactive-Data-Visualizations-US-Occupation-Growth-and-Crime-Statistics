@@ -1,0 +1,80 @@
+# Load required libraries
+library(plotly)
+library(rvest)
+
+# Define the URL of the website to scrape
+url <- "https://howmuch.net/articles/fastest-growing-occupations-in-the-US"  # Replace with the actual URL of the website
+
+# Specify the CSS selector for the table to extract
+table_selector <- "#article_60a22ffe650d7900102748b0 > div.post-detail__content.dynamic-content > table"
+
+# Read the webpage and extract the table
+webpage <- read_html(url)
+table <- html_table(html_nodes(webpage, table_selector), fill = TRUE)
+table_extracted <- table[[1]]
+
+# Fixing format
+# Remove dollar signs from the "2019 Median Pay (Yearly)" column
+table_extracted$`2019 Median Pay (Yearly)` <- gsub("\\$", "", table_extracted$`2019 Median Pay (Yearly)`)
+# Remove commas from the "2019 Median Pay (Yearly)" column
+table_extracted$`2019 Median Pay (Yearly)` <- gsub("\\,", "", table_extracted$`2019 Median Pay (Yearly)`)
+# Remove percentage signs from the "Growth Rate (2019-2029)" column
+table_extracted$`Growth Rate (2019-2029)` <- gsub("\\%", "", table_extracted$`Growth Rate (2019-2029)`)
+
+# Fixing data type
+# Convert "2019 Median Pay (Yearly)" column to numeric
+table_extracted$`2019 Median Pay (Yearly)` <- as.numeric(table_extracted$`2019 Median Pay (Yearly)`)
+# Convert "Growth Rate (2019-2029)" column to numeric
+table_extracted$`Growth Rate (2019-2029)` <- as.numeric(table_extracted$`Growth Rate (2019-2029)`)
+
+
+
+# Create sample data
+data <- data.frame(x = table_extracted$`Growth Rate (2019-2029)` , y = table_extracted$`2019 Median Pay (Yearly)`,
+                   category = table_extracted$Occupation)
+
+# Define color groups for growth rate
+color_groups <- cut(data$x, breaks = c(-Inf, 30, 49.9, 59.9, Inf), labels = c("#fbb4b9", "#f768a1", "#c51b8a", "#7a0177"))
+
+# Create separate traces for each growth range
+trace1 <- subset(data, x <= 30)
+trace2 <- subset(data, x > 30 & x <= 49.9)
+trace3 <- subset(data, x > 49.9 & x <= 59.9)
+trace4 <- subset(data, x > 59.9)
+
+# text font
+t <- list(
+  family = "sans serif",
+  size = 14,
+  color = toRGB("grey50"))
+
+# Create scatter plot using plotly with separate traces
+p <- plot_ly() %>%
+  add_trace(data = trace1, name = "Less than 30%", x = ~x, y = ~y, type = "scatter",
+            mode = "markers", marker = list(show.legend = FALSE, sizemode = "diameter",
+                                            sizeref = 3, color = "#fbb4b9"),
+            text = ~paste("Occupation: ", category, "<br>",
+                          "Growth Rate % (2019-2029): ", x, "<br>",
+                          "2019 Median Pay (K) (Yearly): $", y), hoverinfo = "text") %>%
+  add_trace(data = trace2, name = "30% - 49.9%" , x = ~x, y = ~y, type = "scatter",
+            mode = "markers", marker = list(show.legend = FALSE, sizemode = "diameter",
+                                            sizeref = 3, color = "#f768a1"),
+            text = ~paste("Occupation: ", category, "<br>",
+                          "Growth Rate % (2019-2029): ", x, "<br>",
+                          "2019 Median Pay (K) (Yearly): $", y), hoverinfo = "text") %>%
+  add_trace(data = trace3, name = "50% - 59.9%", x = ~x, y = ~y, type = "scatter",
+            mode = "markers", marker = list(show.legend = FALSE, sizemode = "diameter",
+                                            sizeref = 3, color = "#c51b8a"),
+            text = ~paste("Occupation: ", category, "<br>",
+                          "Growth Rate % (2019-2029): ", x, "<br>",
+                          "2019 Median Pay (K) (Yearly): $", y), hoverinfo = "text") %>%
+  add_trace(data = trace4, name = "60% and above", x = ~x, y = ~y, type = "scatter",
+            mode = "markers", marker = list(show.legend = FALSE, sizemode = "diameter",
+                                            sizeref = 3, color = "#7a0177"),
+            text = ~paste("Occupation: ", category, "<br>",
+                          "Growth Rate % (2019-2029): ", x, "<br>",
+                          "2019 Median Pay (K) (Yearly): $", y), hoverinfo = "text") %>%
+  layout(title = "Fastest Growing Occupations in the US.",  # Set the title of the plot
+         xaxis = list(title = "Growth Rate % (2019-2029)"),  # Set the title of x-axis
+         yaxis = list(title = "2019 Median Pay (K) (Yearly)"),  # Set the title of y-axis
+         showlegend = TRUE)
